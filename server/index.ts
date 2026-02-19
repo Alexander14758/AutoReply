@@ -2,9 +2,20 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { spawn } from "child_process";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Start the Python bot in the background
+const botProcess = spawn("python3", ["main.py"], {
+  stdio: "inherit",
+  env: process.env
+});
+
+botProcess.on("error", (err) => {
+  console.error("Failed to start Python bot:", err);
+});
 
 declare module "http" {
   interface IncomingMessage {
