@@ -1,9 +1,14 @@
 import os
 import asyncio
 import random
+import logging
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from googletrans import Translator
+
+# Enable logging
+logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s',
+                    level=logging.WARNING)
 
 # Configuration from Secrets
 API_ID = int(os.environ.get('API_ID', 0))
