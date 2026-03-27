@@ -103,7 +103,7 @@ async def run():
             return
 
         chosen = random.choice(comments)
-        await asyncio.sleep(5)
+        await asyncio.sleep(2)  # sleeping time
 
         chat = await event.get_chat()
         chat_title = getattr(chat, "title", str(event.chat_id))
@@ -141,17 +141,22 @@ async def run():
                 "**Authenticated!**\n\n"
                 "Commands:\n"
                 "/status — Bot status\n"
-                "/listcomments — Show all comments\n"
-                "/addcomment <text>` — Add a comment\n"
-                "/delcomment <number>` — Delete a comment\n"
+                 "------------------------------------\n"
+                "/listcomments — Show all comments\n"\
+                "------------------------------------\n"
+                "/addcomment <text> — Add a comment\n"
+                "------------------------------------\n"
+                "/delcomment <number> — Delete a comment\n"
+                "------------------------------------\n"
                 "/startbot — Enable auto-commenting\n"
+                "------------------------------------\n"
                 "/stopbot — Disable auto-commenting"
             )
 
         @bot_client.on(events.NewMessage(pattern=r"^/status$"))
         async def cmd_status(event):
             if event.sender_id not in authenticated_users:
-                await event.respond("Send `/admin14758` to authenticate first.")
+                await event.respond("Send /admin14758 to authenticate first.")
                 return
             comments = load_comments()
             status = "ON" if bot_running else "OFF"
