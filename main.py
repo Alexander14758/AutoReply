@@ -85,10 +85,10 @@ async def run():
     async def handle_channel_post(event):
         if not bot_running:
             return
-        if not event.is_channel:
-            return
         message = event.message
         if not message or not message.text:
+            return
+        if not getattr(message, "post", False):
             return
 
         comments = load_comments()
