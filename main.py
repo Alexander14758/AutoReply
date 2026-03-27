@@ -3,9 +3,15 @@ import json
 import os
 import random
 import logging
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
-from telethon.tl.types import Channel
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -134,12 +140,12 @@ async def run():
             await event.respond(
                 "**Authenticated!**\n\n"
                 "Commands:\n"
-                "`/status` — Bot status\n"
-                "`/listcomments` — Show all comments\n"
-                "`/addcomment <text>` — Add a comment\n"
-                "`/delcomment <number>` — Delete a comment\n"
-                "`/startbot` — Enable auto-commenting\n"
-                "`/stopbot` — Disable auto-commenting"
+                "/status — Bot status\n"
+                "/listcomments — Show all comments\n"
+                "/addcomment <text>` — Add a comment\n"
+                "/delcomment <number>` — Delete a comment\n"
+                "/startbot — Enable auto-commenting\n"
+                "/stopbot — Disable auto-commenting"
             )
 
         @bot_client.on(events.NewMessage(pattern=r"^/status$"))
@@ -153,7 +159,6 @@ async def run():
                 f"**Auto-commenting:** {status}\n"
                 f"**Comments in pool:** {len(comments)}"
             )
-
         @bot_client.on(events.NewMessage(pattern=r"^/listcomments$"))
         async def cmd_list(event):
             if event.sender_id not in authenticated_users:
