@@ -1,125 +1,222 @@
-import os
 import asyncio
+import json
+import os
 import random
 import logging
-from telethon import TelegramClient, events, Button
+from telethon import TelegramClient, events
 from telethon.sessions import StringSession
-from googletrans import Translator
+from telethon.tl.types import Channel
 
-# Enable logging
-logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s',
-                    level=logging.WARNING)
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-# Configuration from Secrets
-API_ID = int(os.environ.get('API_ID', 0))
-API_HASH = os.environ.get('API_HASH', '')
-BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
-SESSION_STR = os.environ.get('TELEGRAM_SESSION', '')
+API_ID = int(os.environ.get("API_ID", 0))
+API_HASH = os.environ.get("API_HASH", "")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+TELEGRAM_SESSION = os.environ.get("TELEGRAM_SESSION", "")
 ADMIN_PASSWORD = "/admin14758"
+COMMENTS_FILE = "comments.json"
 
-# State
-unlocked_users = set()
-saved_comments = []
-translator = Translator()
+DEFAULT_COMMENTS = [
+    "I copy traded one wallet today and walked away with over $15.6k",
+    "This signal just made me $8,400 in under 2 hours, unbelievable",
+    "Been following this channel for weeks, finally pulled the trigger and made $12k",
+    "Just closed a trade for +$6,200 profit thanks to this call",
+    "I turned $500 into $4,800 following this channel's tips",
+    "Made my weekly salary in one trade today, this channel is gold",
+    "Copy traded this and banked $9,100 — my best trade ever",
+    "Went in with $1k and came out with $7.3k, these calls are insane",
+    "Finally a channel that actually delivers, up $11k this week alone",
+    "This trade just paid my rent for 3 months, thank you!",
+]
 
-# Initialize Clients
-bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
-user_bot = None
+bot_running = True
+authenticated_users = set()
 
-if SESSION_STR:
-    user_bot = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
 
-async def start_user_bot():
-    global user_bot
-    if user_bot and not user_bot.is_connected():
-        await user_bot.connect()
+def load_comments():
+    if os.path.exists(COMMENTS_FILE):
+        try:
+            with open(COMMENTS_FILE, "r") as f:
+                data = json.load(f)
+                return data.get("comments", DEFAULT_COMMENTS)
+        except Exception:
+            pass
+    save_comments(DEFAULT_COMMENTS)
+    return list(DEFAULT_COMMENTS)
 
-@bot.on(events.NewMessage(pattern='/start'))
-async def start_handler(event):
-    await event.respond("Please enter the password to access the bot.")
 
-@bot.on(events.NewMessage)
-async def message_handler(event):
-    chat_id = event.chat_id
-    text = event.text.strip()
+def save_comments(comments):
+    with open(COMMENTS_FILE, "w") as f:
+        json.dump({"comments": comments}, f, indent=2)
 
-    # Password Check
-    if chat_id not in unlocked_users:
-        if text == ADMIN_PASSWORD:
-            unlocked_users.add(chat_id)
-            await event.respond(
-                "Access Granted! Use the menu below to manage your automation.",
-                buttons=[
-                    [Button.inline("Add Comment", b"add_comment"), Button.inline("View Comments", b"view_comments")],
-                    [Button.inline("Send Messages", b"send_now")]
-                ]
-            )
-        elif text == "/start":
-            pass # Already handled
-        else:
-            await event.respond("Incorrect password.")
+
+async def run():
+    global bot_running
+
+    if not API_ID or not API_HASH:
+        logger.error("API_ID and API_HASH are required. Set them as Replit Secrets.")
         return
 
-    # Handle adding comments via text if in a 'state' (simplified here)
-    if text.startswith("/add "):
-        comment = text[5:]
-        saved_comments.append(comment)
-        await event.respond(f"Comment saved: {comment}")
+    if not TELEGRAM_SESSION:
+        logger.error("TELEGRAM_SESSION is not set. Run login.py first to generate a session string.")
+        return
 
-@bot.on(events.CallbackQuery)
-async def callback_handler(event):
-    if event.data == b"add_comment":
-        await event.respond("To add a comment, send: `/add your comment here`")
-    
-    elif event.data == b"view_comments":
-        if not saved_comments:
-            await event.respond("No comments saved yet.")
-        else:
-            msg = "Saved Comments:\n" + "\n".join([f"- {c}" for c in saved_comments])
-            await event.respond(msg)
+    user_client = TelegramClient(StringSession(TELEGRAM_SESSION), API_ID, API_HASH)
+    await user_client.connect()
+    if not await user_client.is_user_authorized():
+        logger.error("UserBot session is not authorized. Run login.py to generate a fresh TELEGRAM_SESSION.")
+        await user_client.disconnect()
+        return
+    logger.info("UserBot connected successfully.")
 
-    elif event.data == b"send_now":
-        if not SESSION_STR:
-            await event.respond("Error: UserBot session not found. Please run the login script in the console first.")
+    bot_client = None
+    if BOT_TOKEN:
+        bot_client = TelegramClient("bot_session", API_ID, API_HASH)
+        await bot_client.start(bot_token=BOT_TOKEN)
+        logger.info("Control Bot connected successfully.")
+    else:
+        logger.warning("BOT_TOKEN not set — control bot disabled.")
+
+    @user_client.on(events.NewMessage(incoming=True))
+    async def handle_channel_post(event):
+        if not bot_running:
             return
-        
-        if not saved_comments:
-            await event.respond("Please add some comments first.")
+        if not event.is_channel:
+            return
+        message = event.message
+        if not message or not message.text:
             return
 
-        await event.respond("Starting automation...")
-        await run_automation(event)
+        comments = load_comments()
+        if not comments:
+            logger.warning("No comments available to post.")
+            return
 
-async def run_automation(event):
-    await start_user_bot()
-    try:
-        # Get all channels/groups
-        async for dialog in user_bot.iter_dialogs():
-            if dialog.is_channel or dialog.is_group:
-                try:
-                    # Get the last message to check language
-                    messages = await user_bot.get_messages(dialog.id, limit=1)
-                    if not messages: continue
-                    
-                    target_text = messages[0].message or ""
-                    detected = translator.detect(target_text)
-                    
-                    comment = random.choice(saved_comments)
-                    
-                    # Translation logic
-                    if detected.lang == 'es':
-                        comment = translator.translate(comment, dest='es').text
-                    
-                    await user_bot.send_message(dialog.id, comment)
-                    await event.respond(f"Posted to {dialog.name}")
-                    
-                    await asyncio.sleep(5) # 5 second delay
-                except Exception as e:
-                    print(f"Skipping {dialog.name}: {e}")
-        
-        await event.respond("Automation task complete.")
-    except Exception as e:
-        await event.respond(f"Critical Error: {e}")
+        chosen = random.choice(comments)
+        await asyncio.sleep(5)
 
-print("Bot is running...")
-bot.run_until_disconnected()
+        chat = await event.get_chat()
+        chat_title = getattr(chat, "title", str(event.chat_id))
+
+        try:
+            await user_client.send_message(
+                entity=event.chat_id,
+                message=chosen,
+                comment_to=message.id
+            )
+            logger.info(f"Commented on post in [{chat_title}]: {chosen[:60]}...")
+        except Exception:
+            try:
+                await user_client.send_message(
+                    entity=event.chat_id,
+                    message=chosen,
+                    reply_to=message.id
+                )
+                logger.info(f"Replied to post in [{chat_title}]: {chosen[:60]}...")
+            except Exception as e2:
+                logger.error(f"Could not comment in [{chat_title}]: {e2}")
+
+    if bot_client:
+        @bot_client.on(events.NewMessage(pattern=r"^/start$"))
+        async def cmd_start(event):
+            await event.respond(
+                "**Telegram AutoComment Bot**\n\n"
+                "Send `/admin14758` to unlock the controls."
+            )
+
+        @bot_client.on(events.NewMessage(pattern=r"^/admin14758$"))
+        async def cmd_auth(event):
+            authenticated_users.add(event.sender_id)
+            await event.respond(
+                "**Authenticated!**\n\n"
+                "Commands:\n"
+                "`/status` — Bot status\n"
+                "`/listcomments` — Show all comments\n"
+                "`/addcomment <text>` — Add a comment\n"
+                "`/delcomment <number>` — Delete a comment\n"
+                "`/startbot` — Enable auto-commenting\n"
+                "`/stopbot` — Disable auto-commenting"
+            )
+
+        @bot_client.on(events.NewMessage(pattern=r"^/status$"))
+        async def cmd_status(event):
+            if event.sender_id not in authenticated_users:
+                await event.respond("Send `/admin14758` to authenticate first.")
+                return
+            comments = load_comments()
+            status = "ON" if bot_running else "OFF"
+            await event.respond(
+                f"**Auto-commenting:** {status}\n"
+                f"**Comments in pool:** {len(comments)}"
+            )
+
+        @bot_client.on(events.NewMessage(pattern=r"^/listcomments$"))
+        async def cmd_list(event):
+            if event.sender_id not in authenticated_users:
+                await event.respond("Send `/admin14758` to authenticate first.")
+                return
+            comments = load_comments()
+            if not comments:
+                await event.respond("No comments saved yet.")
+                return
+            lines = "\n".join(f"{i+1}. {c}" for i, c in enumerate(comments))
+            await event.respond(f"**Saved Comments:**\n\n{lines}")
+
+        @bot_client.on(events.NewMessage(pattern=r"^/addcomment (.+)$"))
+        async def cmd_add(event):
+            if event.sender_id not in authenticated_users:
+                await event.respond("Send `/admin14758` to authenticate first.")
+                return
+            new_comment = event.pattern_match.group(1).strip()
+            comments = load_comments()
+            comments.append(new_comment)
+            save_comments(comments)
+            await event.respond(f"Comment added. Total: {len(comments)}")
+
+        @bot_client.on(events.NewMessage(pattern=r"^/delcomment (\d+)$"))
+        async def cmd_del(event):
+            if event.sender_id not in authenticated_users:
+                await event.respond("Send `/admin14758` to authenticate first.")
+                return
+            idx = int(event.pattern_match.group(1)) - 1
+            comments = load_comments()
+            if idx < 0 or idx >= len(comments):
+                await event.respond(f"Invalid number. Use 1 to {len(comments)}.")
+                return
+            removed = comments.pop(idx)
+            save_comments(comments)
+            await event.respond(f"Removed: {removed}")
+
+        @bot_client.on(events.NewMessage(pattern=r"^/startbot$"))
+        async def cmd_startbot(event):
+            global bot_running
+            if event.sender_id not in authenticated_users:
+                await event.respond("Send `/admin14758` to authenticate first.")
+                return
+            bot_running = True
+            await event.respond("Auto-commenting is now ON.")
+
+        @bot_client.on(events.NewMessage(pattern=r"^/stopbot$"))
+        async def cmd_stopbot(event):
+            global bot_running
+            if event.sender_id not in authenticated_users:
+                await event.respond("Send `/admin14758` to authenticate first.")
+                return
+            bot_running = False
+            await event.respond("Auto-commenting is now OFF.")
+
+    logger.info(f"Listening for new channel posts. Auto-commenting: {'ON' if bot_running else 'OFF'}")
+
+    tasks = [user_client.run_until_disconnected()]
+    if bot_client:
+        tasks.append(bot_client.run_until_disconnected())
+
+    await asyncio.gather(*tasks)
+
+
+if __name__ == "__main__":
+    asyncio.run(run())
