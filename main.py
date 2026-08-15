@@ -81,7 +81,7 @@ async def run():
 
     bot_client = None
     if BOT_TOKEN:
-        bot_client = TelegramClient("bot_session", API_ID, API_HASH)
+        bot_client = TelegramClient(StringSession(), API_ID, API_HASH)
         await bot_client.start(bot_token=BOT_TOKEN)
         logger.info("Control Bot connected successfully.")
     else:
@@ -103,7 +103,7 @@ async def run():
             return
 
         chosen = random.choice(comments)
-        await asyncio.sleep(5)  # sleeping time
+        await asyncio.sleep(5)
 
         chat = await event.get_chat()
         chat_title = getattr(chat, "title", str(event.chat_id))
@@ -131,7 +131,7 @@ async def run():
         async def cmd_start(event):
             await event.respond(
                 "**Telegram AutoComment Bot**\n\n"
-                "Send /admin14758 to unlock the controls."
+                "Send `/admin14758` to unlock the controls."
             )
 
         @bot_client.on(events.NewMessage(pattern=r"^/admin14758$"))
@@ -141,22 +141,17 @@ async def run():
                 "**Authenticated!**\n\n"
                 "Commands:\n"
                 "/status — Bot status\n"
-                 "------------------------------------\n"
-                "/listcomments — Show all comments\n"\
-                "------------------------------------\n"
-                "/addcomment <text> — Add a comment\n"
-                "------------------------------------\n"
-                "/delcomment <number> — Delete a comment\n"
-                "------------------------------------\n"
+                "/listcomments — Show all comments\n"
+                "/addcomment <text>` — Add a comment\n"
+                "/delcomment <number>` — Delete a comment\n"
                 "/startbot — Enable auto-commenting\n"
-                "------------------------------------\n"
                 "/stopbot — Disable auto-commenting"
             )
 
         @bot_client.on(events.NewMessage(pattern=r"^/status$"))
         async def cmd_status(event):
             if event.sender_id not in authenticated_users:
-                await event.respond("Send /admin14758 to authenticate first.")
+                await event.respond("Send `/admin14758` to authenticate first.")
                 return
             comments = load_comments()
             status = "ON" if bot_running else "OFF"
@@ -167,7 +162,7 @@ async def run():
         @bot_client.on(events.NewMessage(pattern=r"^/listcomments$"))
         async def cmd_list(event):
             if event.sender_id not in authenticated_users:
-                await event.respond("Send /admin14758 to authenticate first.")
+                await event.respond("Send `/admin14758` to authenticate first.")
                 return
             comments = load_comments()
             if not comments:
@@ -179,7 +174,7 @@ async def run():
         @bot_client.on(events.NewMessage(pattern=r"^/addcomment (.+)$"))
         async def cmd_add(event):
             if event.sender_id not in authenticated_users:
-                await event.respond("Send /admin14758 to authenticate first.")
+                await event.respond("Send `/admin14758` to authenticate first.")
                 return
             new_comment = event.pattern_match.group(1).strip()
             comments = load_comments()
@@ -190,7 +185,7 @@ async def run():
         @bot_client.on(events.NewMessage(pattern=r"^/delcomment (\d+)$"))
         async def cmd_del(event):
             if event.sender_id not in authenticated_users:
-                await event.respond("Send /admin14758 to authenticate first.")
+                await event.respond("Send `/admin14758` to authenticate first.")
                 return
             idx = int(event.pattern_match.group(1)) - 1
             comments = load_comments()
@@ -205,7 +200,7 @@ async def run():
         async def cmd_startbot(event):
             global bot_running
             if event.sender_id not in authenticated_users:
-                await event.respond("Send /admin14758 to authenticate first.")
+                await event.respond("Send `/admin14758` to authenticate first.")
                 return
             bot_running = True
             await event.respond("Auto-commenting is now ON.")
@@ -214,7 +209,7 @@ async def run():
         async def cmd_stopbot(event):
             global bot_running
             if event.sender_id not in authenticated_users:
-                await event.respond("Send /admin14758 to authenticate first.")
+                await event.respond("Send `/admin14758` to authenticate first.")
                 return
             bot_running = False
             await event.respond("Auto-commenting is now OFF.")
